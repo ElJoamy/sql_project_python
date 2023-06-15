@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  database:
+    image: mysql:latest
+    container_name: "database"
+    restart: always
+    ports:
+      - 3306:3306
+    command: bash -c "chmod 644 /etc/my.cnf && docker-entrypoint.sh mysqld"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database_mysql:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_LOG_CONSOLE=true
+
+  python:
+    image: python:latest
+    container_name: "python"
+    restart: always
+    volumes:
+      - ./script.py:/script.py
+    depends_on:
+      - database
+    command: bash -c "pip install --upgrade pip && pip install mysql-connector-python && python /script.py"
