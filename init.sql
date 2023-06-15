@@ -155,6 +155,99 @@ CREATE TABLE IF NOT EXISTS Aviso_Proveedor (
   mensaje VARCHAR(100)
 );
 
+-- Creación de la tabla Auditoria_Articulos
+CREATE TABLE IF NOT EXISTS Auditoria_Articulos (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_articulo INT,
+  nombre_articulo VARCHAR(100),
+  id_categoria INT,
+  cantidad_disponible INT,
+  precio_unitario DECIMAL(10,2),
+  fecha_modificacion TIMESTAMP,
+  accion VARCHAR(10),
+  FOREIGN KEY (id_articulo) REFERENCES Articulos(id_articulo),
+  FOREIGN KEY (id_categoria) REFERENCES Categorias(id_categoria)
+);
+
+-- Creación de la tabla Auditoria_Usuarios
+CREATE TABLE IF NOT EXISTS Auditoria_Usuarios (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_usuario INT,
+  nombre_usuario VARCHAR(100),
+  departamento_id INT,
+  fecha_modificacion TIMESTAMP,
+  FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario),
+  FOREIGN KEY (departamento_id) REFERENCES Departamentos(id_departamento)
+);
+
+-- Creación de la tabla Auditoria_Compras
+CREATE TABLE IF NOT EXISTS Auditoria_Compras (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_compra INT,
+  id_proveedor INT,
+  id_articulo INT,
+  cantidad INT,
+  precio_unitario DECIMAL(10,2),
+  fecha_compra TIMESTAMP,
+  FOREIGN KEY (id_compra) REFERENCES Compras(id_compra),
+  FOREIGN KEY (id_proveedor) REFERENCES Proveedores(id_proveedor),
+  FOREIGN KEY (id_articulo) REFERENCES Articulos(id_articulo)
+);
+
+-- Creación de la tabla Auditoria_Ventas
+CREATE TABLE IF NOT EXISTS Auditoria_Ventas (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_venta INT,
+  id_cliente INT,
+  fecha_venta TIMESTAMP,
+  monto_total DECIMAL(10,2),
+  FOREIGN KEY (id_venta) REFERENCES Ventas(id_venta),
+  FOREIGN KEY (id_cliente) REFERENCES Clientes(id_cliente)
+);
+
+-- Creación de la tabla Auditoria_DetalleVentas
+CREATE TABLE IF NOT EXISTS Auditoria_DetalleVentas (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_detalle INT,
+  id_venta INT,
+  id_articulo INT,
+  cantidad INT,
+  precio_unitario DECIMAL(10,2),
+  FOREIGN KEY (id_detalle) REFERENCES DetalleVentas(id_detalle),
+  FOREIGN KEY (id_venta) REFERENCES Ventas(id_venta),
+  FOREIGN KEY (id_articulo) REFERENCES Articulos(id_articulo)
+);
+
+-- Creación de la tabla Auditoria_MarcasArticulos
+CREATE TABLE IF NOT EXISTS Auditoria_MarcasArticulos (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_marca INT,
+  id_articulo INT,
+  fecha_modificacion TIMESTAMP,
+  FOREIGN KEY (id_marca) REFERENCES Marcas(id_marca),
+  FOREIGN KEY (id_articulo) REFERENCES Articulos(id_articulo)
+);
+
+-- Creación de la tabla Auditoria_UsuariosDepartamentos
+CREATE TABLE IF NOT EXISTS Auditoria_UsuariosDepartamentos (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_usuario INT,
+  id_departamento INT,
+  fecha_modificacion TIMESTAMP,
+  FOREIGN KEY (id_usuario) REFERENCES Usuarios(id_usuario),
+  FOREIGN KEY (id_departamento) REFERENCES Departamentos(id_departamento)
+);
+
+-- Creación de la tabla Auditoria_ProveedoresArticulos
+CREATE TABLE IF NOT EXISTS Auditoria_ProveedoresArticulos (
+  id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+  id_proveedor INT,
+  id_articulo INT,
+  fecha_modificacion TIMESTAMP,
+  FOREIGN KEY (id_proveedor) REFERENCES Proveedores(id_proveedor),
+  FOREIGN KEY (id_articulo) REFERENCES Articulos(id_articulo)
+);
+
 
 CREATE INDEX idx_articulos_id_articulo ON Articulos (id_articulo);
 
@@ -292,20 +385,32 @@ END$$
 DELIMITER ;
 
 DELIMITER $$
-CREATE TRIGGER triger_compras
-BEFORE INSERT ON Compras
+CREATE TRIGGER triger_usuarios_update
+BEFORE UPDATE ON Clientes
 FOR EACH ROW
 BEGIN
-  IF NEW.fecha_compra < '2019-01-01' THEN
+  IF NEW.email NOT LIKE '%@%' THEN
     SIGNAL SQLSTATE '45000'
-    SET MESSAGE_TEXT = 'La fecha debe ser mayor a 2019-01-01';
+    SET MESSAGE_TEXT = 'El email debe contener un @';
+  END IF;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER triger_compras
+BEFORE UPDATE ON Compras
+FOR EACH ROW
+BEGIN
+  IF NEW.fecha_compra < OLD.fecha_compra THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'La fecha debe ser mayor o igual a la fecha existente';
   END IF;
 END$$
 DELIMITER ;
 
 DELIMITER $$
 CREATE TRIGGER triger_articulos
-BEFORE INSERT ON Articulos
+BEFORE UPDATE ON Articulos
 FOR EACH ROW
 BEGIN
   IF NEW.precio_unitario < 0 THEN
@@ -316,7 +421,8 @@ END$$
 DELIMITER ;
 
 DELIMITER $$
-CREATE TRIGGER triger_verificar_cantidad_minima
+
+CREATE TRIGGER trigger_verificar_cantidad_minima
 AFTER UPDATE ON Articulos
 FOR EACH ROW
 BEGIN
@@ -324,21 +430,23 @@ BEGIN
   DECLARE proveedor_telefono VARCHAR(20);
   DECLARE mensaje VARCHAR(100);
   
-  SET cantidad_minima = 10; 
-  
-  SELECT telefono INTO proveedor_telefono
-  FROM Proveedores
-  WHERE id_proveedor = (
-    SELECT id_proveedor
-    FROM ProveedoresArticulos
-    WHERE id_articulo = NEW.id_articulo
-  );
+  SET cantidad_minima = 10;
   
   IF NEW.cantidad_disponible < cantidad_minima THEN
-    SET mensaje = CONCAT('El artículo con ID ', NEW.id_articulo, ' está en una cantidad mínima. Por favor enviar más.');
+    SELECT telefono INTO proveedor_telefono
+    FROM Proveedores
+    WHERE id_proveedor IN (
+      SELECT id_proveedor
+      FROM ProveedoresArticulos
+      WHERE id_articulo = NEW.id_articulo
+    );
     
-    INSERT INTO Aviso_Proveedor (telefono_proveedor, id_articulo, mensaje)
-    VALUES (proveedor_telefono, NEW.id_articulo, mensaje);
+    IF proveedor_telefono IS NOT NULL THEN
+      SET mensaje = CONCAT('El artículo con ID ', NEW.id_articulo, ' está en una cantidad mínima. Por favor enviar más.');
+      
+      INSERT INTO Aviso_Proveedor (telefono_proveedor, id_articulo, mensaje)
+      VALUES (proveedor_telefono, NEW.id_articulo, mensaje);
+    END IF;
   END IF;
 END$$
 
@@ -366,15 +474,18 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_articulos
-AFTER INSERT ON Articulos
+AFTER UPDATE ON Articulos
 FOR EACH ROW
 BEGIN
-  INSERT INTO Auditoria_Articulos (id_articulo, nombre_articulo, id_categoria, cantidad_disponible, precio_unitario, fecha_modificacion)
-  VALUES (NEW.id_articulo, NEW.nombre_articulo, NEW.id_categoria, NEW.cantidad_disponible, NEW.precio_unitario, CURRENT_TIMESTAMP);
+  DECLARE accion VARCHAR(10);
+  SET accion = 'UPDATE';
+
+  INSERT INTO Auditoria_Articulos (id_articulo, nombre_articulo, cantidad_disponible, precio_unitario, accion, fecha_modificacion)
+  VALUES (OLD.id_articulo, OLD.nombre_articulo, NEW.cantidad_disponible, NEW.precio_unitario, accion, CURRENT_TIMESTAMP);
 END$$
 
 CREATE TRIGGER triger_auditar_usuarios
-AFTER INSERT ON Usuarios
+AFTER UPDATE ON Usuarios
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_Usuarios (id_usuario, nombre_usuario, departamento_id, fecha_modificacion)
@@ -382,7 +493,7 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_compras
-AFTER INSERT ON Compras
+AFTER UPDATE ON Compras
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_Compras (id_compra, id_proveedor, id_articulo, cantidad, precio_unitario, fecha_compra)
@@ -390,7 +501,7 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_ventas
-AFTER INSERT ON Ventas
+AFTER UPDATE ON Ventas
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_Ventas (id_venta, id_cliente, fecha_venta, monto_total)
@@ -398,7 +509,7 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_detalle_ventas
-AFTER INSERT ON DetalleVentas
+AFTER UPDATE ON DetalleVentas
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_DetalleVentas (id_detalle, id_venta, id_articulo, cantidad, precio_unitario)
@@ -406,7 +517,7 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_marcas_articulos
-AFTER INSERT ON MarcasArticulos
+AFTER UPDATE ON MarcasArticulos
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_MarcasArticulos (id_marca, id_articulo, fecha_modificacion)
@@ -414,7 +525,7 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_usuarios_departamentos
-AFTER INSERT ON UsuariosDepartamentos
+AFTER UPDATE ON UsuariosDepartamentos
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_UsuariosDepartamentos (id_usuario, id_departamento, fecha_modificacion)
@@ -422,10 +533,11 @@ BEGIN
 END$$
 
 CREATE TRIGGER triger_auditar_proveedores_articulos
-AFTER INSERT ON ProveedoresArticulos
+AFTER UPDATE ON ProveedoresArticulos
 FOR EACH ROW
 BEGIN
   INSERT INTO Auditoria_ProveedoresArticulos (id_proveedor, id_articulo, fecha_modificacion)
   VALUES (NEW.id_proveedor, NEW.id_articulo, CURRENT_TIMESTAMP);
 END$$
+
 DELIMITER ;

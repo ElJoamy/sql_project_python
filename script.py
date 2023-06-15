@@ -271,13 +271,83 @@ def generar_datos_marcas_articulos():
     marcas = cursor.fetchall()
     cursor.execute("SELECT id_articulo FROM Articulos")
     articulos = cursor.fetchall()
+    
+    combinaciones_generadas = set()  # Conjunto para almacenar combinaciones únicas
+    
     for i in range(50):
         id_marca = random.choice(marcas)[0]
         id_articulo = random.choice(articulos)[0]
+        
+        # Verificar si la combinación ya ha sido generada antes
+        combinacion = (id_marca, id_articulo)
+        if combinacion in combinaciones_generadas:
+            continue  # Saltar la iteración si la combinación ya existe
+        
+        # Agregar la combinación generada al conjunto
+        combinaciones_generadas.add(combinacion)
+        
         query = "INSERT INTO MarcasArticulos (id_marca, id_articulo) VALUES (%s, %s)"
         values = (id_marca, id_articulo)
         cursor.execute(query, values)
+    
     cnx.commit()
+
+
+# Generar datos para la tabla ProveedoresArticulos
+def generar_datos_proveedores_articulos():
+    cursor.execute("SELECT id_proveedor FROM Proveedores")
+    proveedores = cursor.fetchall()
+    cursor.execute("SELECT id_articulo FROM Articulos")
+    articulos = cursor.fetchall()
+
+    # Crear un conjunto para realizar un seguimiento de las combinaciones ya generadas
+    combinaciones_generadas = set()
+
+    for i in range(50):
+        # Generar una combinación única de id_proveedor e id_articulo
+        while True:
+            id_proveedor = random.choice(proveedores)[0]
+            id_articulo = random.choice(articulos)[0]
+            combinacion = f"{id_proveedor}-{id_articulo}"
+            if combinacion not in combinaciones_generadas:
+                combinaciones_generadas.add(combinacion)
+                break
+
+        query = "INSERT INTO ProveedoresArticulos (id_proveedor, id_articulo) VALUES (%s, %s)"
+        values = (id_proveedor, id_articulo)
+        cursor.execute(query, values)
+
+    cnx.commit()
+
+
+# Generar datos para la tabla UsuariosDepartamentos
+def generar_datos_usuarios_departamentos():
+    cursor.execute("SELECT id_usuario FROM Usuarios")
+    usuarios = cursor.fetchall()
+    cursor.execute("SELECT id_departamento FROM Departamentos")
+    departamentos = cursor.fetchall()
+    
+    # Crear una lista para realizar un seguimiento de las combinaciones ya generadas
+    combinaciones_generadas = set()
+    
+    for i in range(50):
+        # Generar una combinación única de id_usuario e id_departamento
+        while True:
+            id_usuario = random.choice(usuarios)[0]
+            id_departamento = random.choice(departamentos)[0]
+            combinacion = f"{id_usuario}-{id_departamento}"
+            if combinacion not in combinaciones_generadas:
+                combinaciones_generadas.add(combinacion)
+                break
+        
+        query = "INSERT INTO UsuariosDepartamentos (id_usuario, id_departamento) VALUES (%s, %s)"
+        values = (id_usuario, id_departamento)
+        cursor.execute(query, values)
+    
+    cnx.commit()
+
+
+
 
 # Generar todos los datos
 generar_datos_departamentos()
@@ -295,7 +365,11 @@ generar_datos_clientes()
 generar_datos_ventas()
 generar_datos_detalle_ventas()
 generar_datos_marcas_articulos()
+generar_datos_proveedores_articulos()
+generar_datos_usuarios_departamentos()
 
 # Cerrar la conexión a la base de datos
 cursor.close()
 cnx.close()
+
+print("Datos generados correctamente")
